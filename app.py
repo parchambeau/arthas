@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request, jsonify
 import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -31,28 +31,29 @@ session = Session()
 def base_route():
     return 'Base Transaction Route'
 
-# Service to save transactions that are input by user (type, currency_code, amount)
+# Service to save transactions that are input by user
+# Must include type, currency code, and amount in json format
 # Currency code must be BTC or ETH
-@app.route('/store_transaction/<type>/<currency_code>/<amount>')
-def store_transaction(type, currency_code, amount):
+@app.route('/store_transaction/', methods=['POST'])
+def store_transaction():
+
+    # Grab the json that was posted
+    posted_json = request.json
 
     # Hard coded to USD for demonstration purposes
     quote_currency_code = 'USD'
 
     # Pull the usd value of the currency code passed in to be stored as amount_usd
-    response = requests.get(PRICING_SERVICE_BASE_URL + currency_code + '/'  + quote_currency_code).json()
-    
-    print (response)
-    print (response['close_price'])
+    response = requests.get(PRICING_SERVICE_BASE_URL + posted_json['currency_code'] + '/'  + quote_currency_code).json()
 
     # Create new transaction object
     new_transaction = Transactions(
         id=str(uuid.uuid4()),
         datetime=datetime.now(),
-        type=type,
-        currency_code=currency_code,
-        amount=Decimal(amount),
-        amount_usd=Decimal(amount) * Decimal(response['close_price']) # Calc amount usd based off of close price of /price/ endpoint
+        type=posted_json['type'],
+        currency_code=posted_json['currency_code'],
+        amount=Decimal(posted_json['amount']),
+        amount_usd=Decimal(posted_json['amount']) * Decimal(response['close_price']) # Calc amount usd based off of close price of /price/ endpoint
     )
   
     # Add transaction to db
@@ -60,8 +61,25 @@ def store_transaction(type, currency_code, amount):
     # Commit transaction to db
     session.commit()
 
+    # Set notification message body
+    message_body = {
+        'type': 'transaction',
+        'message': 'New transaction added to db',
+        'body': {
+            'id': new_transaction.id,
+            'datetime': new_transaction.datetime.strftime("%m-%d-%Y %H:%M:%S"),
+            'type': new_transaction.type,
+            'currency_code': new_transaction.currency_code,
+            'amount': str(new_transaction.amount),
+            'amount_usd': str(new_transaction.amount_usd)
+        }
+    }
+
+    # # Send notification to thrall service
+    # response = requests.post('http://localhost:5001/notify/', json=message_body)
+
     # Return if transactions successfully saved
-    return 'Transaction successfully saved'
+    return 'Transaction successfully saved and notification sent to queue.'
 
 
 if __name__ == '__main__':
