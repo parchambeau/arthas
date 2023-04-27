@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import uuid
 import requests
 from decimal import Decimal
+import logging as logger
 
 
 app = Flask(__name__)
@@ -18,7 +19,8 @@ load_dotenv()
 
 # Grab secrets from environment variables
 DATABASE_URL = os.environ.get('DATABASE_URL')
-PRICING_SERVICE_BASE_URL = os.environ.get('PRICING_SERVICE_BASE_URL')
+PRICING_SERVICE_URL = os.environ.get('PRICING_SERVICE_URL')
+NOTIFICATION_SERVICE_URL = os.environ.get('NOTIFICATION_SERVICE_URL')
 
 # Setup DB connection
 engine = create_engine(DATABASE_URL)
@@ -43,8 +45,12 @@ def store_transaction():
     # Hard coded to USD for demonstration purposes
     quote_currency_code = 'USD'
 
-    # Pull the usd value of the currency code passed in to be stored as amount_usd
-    response = requests.get(PRICING_SERVICE_BASE_URL + posted_json['currency_code'] + '/'  + quote_currency_code).json()
+    try:
+        # Pull the usd value of the currency code passed in to be stored as amount_usd
+        response = requests.get(PRICING_SERVICE_URL + posted_json['currency_code'] + '/'  + quote_currency_code).json()
+    except requests.exceptions.RequestException as e:  
+        # If there is an error, return the error message
+        return logger.error(e)
 
     # Create new transaction object
     new_transaction = Transactions(
@@ -75,8 +81,12 @@ def store_transaction():
         }
     }
 
-    # # Send notification to thrall service
-    # response = requests.post('http://localhost:5001/notify/', json=message_body)
+    try:
+        # Send notification to thrall service
+        response = requests.post(NOTIFICATION_SERVICE_URL, json=message_body)
+    except requests.exceptions.RequestException as e:  # This is the correct syntax
+        # If there is an error, return the error message
+        return logger.error(e)
 
     # Return if transactions successfully saved
     return 'Transaction successfully saved and notification sent to queue.'
