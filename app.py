@@ -29,6 +29,8 @@ engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 session = Session()
 
+# TODO Decouple the storage and amount_usd fetching into two separate services
+
 @app.route('/')
 def base_route():
     return 'Base Transaction Route'
